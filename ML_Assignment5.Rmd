@@ -2,21 +2,26 @@
 title: "ML_Assignment5"
 output: html_document
 date: "2023-02-20"
+editor_options: 
+  chunk_output_type: console
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-### Load needed libraries
-```{r}
+
+## Load needed libraries
+```{r, message=FALSE}
 library(tidyverse) 
 library(caret)
 library(glmnet)
 library(klaR)
+library(pROC)
+library(knitr)
 ```
 
-### Data preparation
+## Data preparation
 ```{r}
 set.seed(123)
 
@@ -27,7 +32,7 @@ alcohol_use$X<-NULL
 
 ```
 
-### Data partition
+## Data partition
 ```{r}
 set.seed(123)
 
@@ -36,4 +41,159 @@ train_data <-alcohol_use[train_alcohol, ]
 test_data <-alcohol_use[-train_alcohol, ]
 
 ```
+
+## Running the algorithms on the training data
+
+### *Ridge Regression*
+```{r}
+set.seed(123)
+
+lambda<-10^seq(-3,3, length=100)
+
+ridge_model<- train(
+  alc_consumption ~., data = train_data, method = "glmnet",
+  trControl = trainControl("cv", number = 10), preProc=c("center", "scale"),
+tuneGrid=expand.grid(alpha=0, lambda=lambda))
+
+#Print the values of alpha and lambda that gave best prediction
+ridge_model$bestTune
+
+# Model coefficients
+coef(ridge_model$finalModel, ridge_model$bestTune$lambda)
+
+# Make predictions in test set
+ridge_pred <- predict(ridge_model, newdata = test_data)
+
+```
+
+### *LASSO*
+```{r}
+set.seed(123)
+
+lambda<-10^seq(-3,3, length=100)
+
+lasso_model<- train(
+  alc_consumption ~., data = train_data, method = "glmnet",
+  trControl = trainControl("cv", number = 10), preProc=c("center", "scale"),
+tuneGrid=expand.grid(alpha=1, lambda=lambda))
+
+#Print the values of alpha and lambda that gave best prediction
+lasso_model$bestTune
+
+# Model coefficients
+coef(lasso_model$finalModel, lasso_model$bestTune$lambda)
+
+# Make predictions in test set
+lasso_pred <- predict(lasso_model, newdata = test_data)
+```
+
+
+### *Elastic net*
+```{r}
+set.seed(123)
+
+en_model<- train(
+  alc_consumption ~., data = train_data, method = "glmnet",
+  trControl = trainControl("cv", number = 10), preProc=c("center", "scale"),
+ tuneLength=10
+  )
+
+#Print the values of alpha and lambda that gave best prediction
+en_model$bestTune
+
+# Model coefficients
+coef(en_model$finalModel, en_model$bestTune$lambda)
+
+# Make predictions in test set
+en_pred <- predict(en_model, newdata = test_data)
+
+
+```
+
+
+## Models prediction performance 
+### *Ridge regression, LASSO, and Elastic net*
+```{r}
+set.seed(123)
+
+# Convert alc_consumption to a factor
+test_data$alc_consumption <- as.factor(test_data$alc_consumption)
+
+# Make predictions in test set
+ridge_pred <- predict(ridge_model, newdata = test_data)
+lasso_pred <- predict(lasso_model, newdata = test_data)
+   en_pred <- predict(en_model, newdata = test_data)
+
+# Convert predicted values to numeric
+ridge_pred_numeric <- as.numeric(ridge_pred)
+lasso_pred_numeric <- as.numeric(lasso_pred)
+   en_pred_numeric <- as.numeric(en_pred)
+
+# Accuracy
+ridge_acc <- mean(ridge_pred == test_data$alc_consumption)
+lasso_acc <- mean(lasso_pred == test_data$alc_consumption)
+   en_acc <- mean(en_pred == test_data$alc_consumption)
+
+# Sensitivity
+ridge_sens <- sensitivity(ridge_pred, test_data$alc_consumption)
+lasso_sens <- sensitivity(lasso_pred, test_data$alc_consumption)
+   en_sens <- sensitivity(en_pred, test_data$alc_consumption)
+
+# Area under the ROC curve (AUC)
+ridge_auc <- roc(test_data$alc_consumption, ridge_pred_numeric)$auc
+lasso_auc <- roc(test_data$alc_consumption, lasso_pred_numeric)$auc
+   en_auc <- roc(test_data$alc_consumption, en_pred_numeric)$auc
+
+# Create data frame of results
+results_df <- data.frame(
+  Model = c("Ridge", "Lasso", "Elastic Net"),
+  Accuracy = c(round(ridge_acc, 3), round(lasso_acc, 3), round(en_acc, 3)),
+  Sensitivity = c(round(ridge_sens, 3), round(lasso_sens, 3), round(en_sens, 3)),
+  AUC = c(round(ridge_auc, 3), round(lasso_auc, 3), round(en_auc, 3))
+)
+
+# Print table of results
+kable(results_df, format = "markdown")
+```
+
+*Comments:* 
+
+We obtain the same value of accuracy and the same value of AUC for LASSO model and Elastic net model. And they're both higher the ridge model. 
+`Accuracy` = 0.855 > 0.804 
+  `AUC` = 0.845 > 0.803   
+Since we want to choose the best-performing model as our final model based on the results of the tuning process, so, we're going to choose Elastic model as the final model. 
+
+### *Final model*
+```{r}
+set.seed(123)
+
+# Make predictions with the final model (Elastic Net) on the test set
+final_model <- en_model  
+final_pred <- predict(final_model, newdata=test_data)
+ final_pred_numeric <- as.numeric(final_pred)
+
+# Calculate final evaluation metrics
+final_auc <- roc(test_data$alc_consumption, final_pred_numeric)$auc
+final_acc <- mean(final_pred == test_data$alc_consumption)
+final_sens <- sensitivity(test_data$alc_consumption, final_pred)
+
+# Print final evaluation metrics
+cat("Final AUC:", final_auc, "\n")
+cat("Final accuracy:", final_acc, "\n")
+cat("Final sensitivity:", final_sens, "\n")
+```
+
+#### **What research questions could this analysis either a) directly address or b) indirectly help to address by providing information that could be used in subsequent analyses? **
+
+*Comments:*
+
+From the direct aspects, I think the research question could be addressed according to this analysis are as follows: 
+1. "Which features on personality traits are most useful to predict individuals' alcohol consumption?" 
+2."What factors are associated with alcohol consumption among participants?"
+The logistic regression model in this analysis can identify the most important predictors of alcohol consumption and estimate their effect sizes.
+From the indirect aspects, I consider this analysis may give information that could be used in subsequent analyses in this research question "How can we provide more effective interventions to prevent excessive alcohol consumption among adolescents?".
+
+
+
+
 
