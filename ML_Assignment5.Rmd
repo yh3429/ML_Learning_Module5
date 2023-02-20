@@ -1,0 +1,39 @@
+---
+title: "ML_Assignment5"
+output: html_document
+date: "2023-02-20"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Load needed libraries
+```{r}
+library(tidyverse) 
+library(caret)
+library(glmnet)
+library(klaR)
+```
+
+### Data preparation
+```{r}
+set.seed(123)
+
+alcohol_use<-read.csv("~/OneDrive - cumc.columbia.edu/2023 Columbia Spring/Machine Learning for Epi/ML_Learning_Module5/alcohol_use.csv")
+
+#Strip off ID Variable
+alcohol_use$X<-NULL
+
+```
+
+### Data partition
+```{r}
+set.seed(123)
+
+train_alcohol <-createDataPartition(y=alcohol_use$alc_consumption,p=0.7,list=FALSE)
+train_data <-alcohol_use[train_alcohol, ]
+test_data <-alcohol_use[-train_alcohol, ]
+
+```
+
